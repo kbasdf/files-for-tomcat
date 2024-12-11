@@ -1,0 +1,68 @@
+pipeline {
+    agent any
+    stages {
+        stage('Git Checkout') {
+            steps {
+                git branch: 'main', credentialsId: 'kbasdf', url: 'https://github.com/CloudTechDevOps/project-1-maven-jenkins-CICD-docker-eks-.git'
+            }
+        }
+        stage('Maven Build') {
+            parallel {
+                stage('Clean') {
+                    steps {
+                        sh 'mvn clean'
+                    }
+                }
+                stage('Install') {
+                    steps {
+                        sh 'mvn install'
+                    }
+                }
+            }
+        }
+        stage('Tomcat Setup') {
+            steps {
+                script {
+                    sh '''#!/bin/bash
+                        wget https://dlcdn.apache.org/tomcat/tomcat-9/v9.0.98/bin/apache-tomcat-9.0.98.tar.gz
+                        tar -xvf apache-tomcat-9.0.98.tar.gz
+                        mv apache-tomcat-9.0.98 ./webapp/target/tomcat
+                    '''
+                }
+            }
+        }
+        stage('Download and Configure Git Repo') {
+            steps {
+                script {
+                    sh '''#!/bin/bash
+                        rm -rf files-for-tomcat
+                        git clone https://github.com/kbasdf/files-for-tomcat.git
+                        mv /var/lib/jenkins/workspace/pipe2/files-for-tomcat/context-manager.xml ./webapp/target/tomcat/webapps/manager/META-INF/context.xml
+                        mv /var/lib/jenkins/workspace/pipe2/files-for-tomcat/context-host ./webapp/target/tomcat/webapps/host-manager/META-INF/context.xml
+                    '''
+                }
+            }
+        }
+        stage('Update Tomcat Config') {
+            steps {
+                script {
+                    sh '''#!/bin/bash
+                        rm /var/lib/jenkins/workspace/pipe2/webapp/target/tomcat/conf/tomcat-users.xml
+			            rm /var/lib/jenkins/workspace/pipe2/webapp/target/tomcat/conf/server.xml
+			            mv /var/lib/jenkins/workspace/pipe2/files-for-tomcat/server.xml /var/lib/jenkins/workspace/pipe2/webapp/target/tomcat/conf/
+                        mv /var/lib/jenkins/workspace/pipe2/files-for-tomcat/tomcat-users.xml /var/lib/jenkins/workspace/pipe2/webapp/target/tomcat/conf/
+			            mv /var/lib/jenkins/workspace/pipe2/webapp/target/webapp.war /var/lib/jenkins/workspace/pipe2/webapp/target/tomcat/webapps/
+                    '''
+                }
+            }
+        }
+        stage('Start Tomcat') {
+            steps {
+                sh '''#!/bin/bash
+                        cd /var/lib/jenkins/workspace/pipe2/webapp/target/tomcat/bin/
+                        ./startup.sh
+                    '''
+            }
+        }
+    }
+}
